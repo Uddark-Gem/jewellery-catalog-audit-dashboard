@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config/env.js';
 import { parseCsvText } from '../services/csvService.js';
-import { googleSheetsRepo } from './googleSheetsRepo.js';
 import { getGoogleIntegrationStatus } from '../config/google.js';
+
+import { defaultSheetsService } from '../services/googleSheetsService.js';
 
 const CACHE_FILE = path.join(config.paths.data, 'audit-databases-cache.json');
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -40,24 +41,31 @@ export class ReferenceRepository {
   }
 
   async fetchFromGoogleSheets(availableSheets) {
-    const results = [];
-    for (let index = 0; index < availableSheets.length; index++) {
-      const title = availableSheets[index];
-      // Skip the main products or audit updates tabs if we are reading reference data
-      if (title === config.google.sheetName || title === 'Audit_Updates') continue;
+    const targetSheets = availableSheets.filter(
+      (title) => title !== config.google.sheetName && title !== 'Audit_Updates'
+    );
+    if (targetSheets.length === 0) return [];
 
-      const { headers, rows } = await googleSheetsRepo.getWorksheet(title);
+    const ranges = targetSheets.map((title) => `'${title}'!A1:ZZ`);
+    const batchData = await defaultSheetsService.batchReadSheets(ranges);
+
+    const results = [];
+    targetSheets.forEach((title, index) => {
+      const matchedKey = Object.keys(batchData).find((k) => k.includes(title));
+      const sheetData = matchedKey ? batchData[matchedKey] : { headers: [], rows: [] };
+
       results.push({
         source: `Google Sheets: ${title}`,
         spreadsheetId: config.google.spreadsheetId,
         sheetId: title,
         sheetTitle: title,
         index,
-        rowCount: rows.length,
-        columns: headers,
-        rows,
+        rowCount: sheetData.rows.length,
+        columns: sheetData.headers,
+        rows: sheetData.rows,
       });
-    }
+    });
+
     return results;
   }
 
