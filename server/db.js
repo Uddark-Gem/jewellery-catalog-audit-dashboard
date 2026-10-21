@@ -1,11 +1,18 @@
+import fs from 'fs';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { config } from './config/env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DB_PATH = path.join(__dirname, '../data/audit.db');
+
+const dbDir = config.paths.data;
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+const DB_PATH = path.join(dbDir, 'audit.db');
 
 export async function getDb() {
   const db = await open({

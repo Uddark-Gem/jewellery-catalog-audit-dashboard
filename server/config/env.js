@@ -33,6 +33,8 @@ loadEnvFile(path.join(rootDir, '.env.local'));
 // 2. Try .env as fallback
 loadEnvFile(path.join(rootDir, '.env'));
 
+const isVercel = Boolean(process.env.VERCEL);
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: Number.parseInt(process.env.PORT || '3000', 10),
@@ -50,8 +52,8 @@ export const config = {
   },
   paths: {
     root: rootDir,
-    data: path.join(rootDir, 'data'),
-    backups: path.join(rootDir, 'data/backups'),
+    data: isVercel ? '/tmp/data' : path.join(rootDir, 'data'),
+    backups: isVercel ? '/tmp/backups' : path.join(rootDir, 'data/backups'),
     database: path.join(rootDir, 'Database'),
     secrets: path.join(rootDir, 'secrets'),
   },
