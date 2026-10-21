@@ -12,28 +12,45 @@ let cachedDrive = null;
  * Throws a descriptive error if configuration or files are missing.
  */
 export function getServiceAccountCredentials() {
-  // Option 1: Base64 string in environment (useful in cloud/serverless deployments)
-  if (config.google.serviceAccountBase64) {
+  // Option 1: Direct JSON or Base64 string in environment (GOOGLE_SHEET or GOOGLE_SERVICE_ACCOUNT_BASE64)
+  const envSecret = process.env.GOOGLE_SHEET || config.google.serviceAccountBase64;
+  if (envSecret) {
     try {
-      const decoded = Buffer.from(config.google.serviceAccountBase64, 'base64').toString('utf8');
-      const parsed = JSON.parse(decoded);
+      const trimmed = envSecret.trim();
+      let parsed;
+      if (trimmed.startsWith('{')) {
+        parsed = JSON.parse(trimmed);
+      } else {
+        const decoded = Buffer.from(trimmed, 'base64').toString('utf8');
+        parsed = JSON.parse(decoded);
+      }
       validateCredentialFields(parsed);
       return parsed;
     } catch (err) {
-      throw new Error(`Invalid GOOGLE_SERVICE_ACCOUNT_BASE64: ${err.message}`);
+      throw new Error(`Invalid GOOGLE_SHEET / GOOGLE_SERVICE_ACCOUNT_BASE64: ${err.message}`);
     }
   }
 
-  // Option 2: Local JSON file on disk
-  const resolvedPath = path.isAbsolute(config.google.serviceAccountPath)
+  // Option 2: Local JSON file on disk (or auto-detect any .json in ./secrets/)
+  let resolvedPath = path.isAbsolute(config.google.serviceAccountPath)
     ? config.google.serviceAccountPath
     : path.resolve(config.paths.root, config.google.serviceAccountPath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    const secretsDir = path.resolve(config.paths.root, 'secrets');
+    if (fs.existsSync(secretsDir)) {
+      const jsonFiles = fs.readdirSync(secretsDir).filter((f) => f.endsWith('.json'));
+      if (jsonFiles.length > 0) {
+        resolvedPath = path.join(secretsDir, jsonFiles[0]);
+      }
+    }
+  }
 
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(
       `Google Service Account credentials file not found at: ${resolvedPath}. ` +
       `Please place your service account JSON file into './secrets/google-service-account.json' ` +
-      `or set GOOGLE_SERVICE_ACCOUNT_JSON_PATH in your .env.local file.`
+      `or set GOOGLE_SERVICE_ACCOUNT_JSON_PATH (or GOOGLE_SHEET) in your .env.local file.`
     );
   }
 
