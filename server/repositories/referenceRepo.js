@@ -51,7 +51,11 @@ export class ReferenceRepository {
 
     const results = [];
     targetSheets.forEach((title, index) => {
-      const matchedKey = Object.keys(batchData).find((k) => k.includes(title));
+      const cleanTitle = title.replace(/^'|'$/g, '').trim().toLowerCase();
+      const matchedKey = Object.keys(batchData).find((k) => {
+        const cleanK = k.split('!')[0].replace(/^'|'$/g, '').trim().toLowerCase();
+        return cleanK === cleanTitle || k.toLowerCase().includes(cleanTitle);
+      });
       const sheetData = matchedKey ? batchData[matchedKey] : { headers: [], rows: [] };
 
       results.push({
