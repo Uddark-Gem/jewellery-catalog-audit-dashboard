@@ -1,0 +1,5 @@
+sku,name,url_key,weight_ratti,hsn_code,tax_class_id,stickers,price,status,qty
+product-sku-001,Blue Sapphire 2 Ratti,/blue-sapphire-2-ratti,2.00,711319,1,best_seller,15000,enabled,10
+product-sku-002,Red Ruby 3 Ratti,/red-ruby-3-ratti,3.00,711319,1,,25000,enabled,0
+product-sku-003,Emerald 4 Ratti,/emerald-4-ratti,4.00,711319,1,new,45000,disabled,5
+product-sku-004,Yellow Sapphire 5 Ratti,/yellow-sapphire-5-ratti,5.00,711319,0,,55000,enabled,2
