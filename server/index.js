@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import { config } from './config/env.js';
@@ -28,6 +30,16 @@ app.use('/api/sheets', googleSheetsRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api', syncRoutes);
+
+// Serve static client build if dist exists (Production Single-Port Mode)
+const distPath = path.resolve(config.paths.root, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // Global Error Handler
 app.use((err, _req, res, _next) => {
