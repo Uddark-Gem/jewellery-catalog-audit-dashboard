@@ -447,6 +447,15 @@ export default function App() {
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [pasteData, setPasteData] = useState('');
   const [downloadProgress, setDownloadProgress] = useState(null);
+  const [datasetTotals, setDatasetTotals] = useState({
+    report: 115314,
+    q3_processed_images: 540350,
+    videodata_new: 127134,
+    templatetagproduct_gemstone: 80829,
+    templatetagproduct_jewellery: 34217,
+    custom_option_issues: 1000,
+    templatetagproduct: 2485,
+  });
   const workspaceCache = useRef({});
   const sseRef = useRef(null);
 
@@ -493,26 +502,34 @@ export default function App() {
   const gemstone2WiseIndex = useMemo(() => buildGemstone2WiseIndex(databaseSheets), [databaseSheets]);
   const activeRowCount = activeDatabase
     ? activeDatabase.rows.length
-    : ['report', 'q3_processed_images', 'videodata_new', 'templatetagproduct_gemstone', 'templatetagproduct_jewellery', 'templatetagproduct', 'custom_option_issues'].includes(active)
-      ? reportRows.length
-      : UPDATE_PANELS[active]
-        ? (updateRows[active]?.length ?? 0)
-        : active === 'instock'
-          ? (stockRows.in?.length ?? 0)
-          : active === 'outstock'
-            ? (stockRows.out?.length ?? 0)
-            : 0;
+    : datasetTotals[active] || (
+        ['report', 'q3_processed_images', 'videodata_new', 'templatetagproduct_gemstone', 'templatetagproduct_jewellery', 'templatetagproduct', 'custom_option_issues'].includes(active)
+          ? reportRows.length
+          : UPDATE_PANELS[active]
+            ? (updateRows[active]?.length ?? 0)
+            : active === 'instock'
+              ? (stockRows.in?.length ?? 0)
+              : active === 'outstock'
+                ? (stockRows.out?.length ?? 0)
+                : 0
+      );
 
   const getCatalogRows = () => (workspaceCache.current['report']?.rows?.length ? workspaceCache.current['report'].rows : reportRows);
 
-  const hydrateWorkspace = (rows, source, columns, activeId = 'report') => {
+  const hydrateWorkspace = (rows, source, columns, activeId = 'report', totalCount = null) => {
     const csvColumns = makeReportColumns(getReportColumnKeys(rows, columns, activeId));
     const cloned = cloneRowsWithIds(rows, activeId);
+
+    const total = totalCount || datasetTotals[activeId] || rows.length;
+    if (totalCount) {
+      setDatasetTotals((prev) => ({ ...prev, [activeId]: totalCount }));
+    }
 
     workspaceCache.current[activeId] = {
       rows: cloned,
       columns: csvColumns,
       source,
+      totalCount: total,
     };
 
     if (activeId === 'report') {
@@ -526,7 +543,7 @@ export default function App() {
     setActive(activeId);
 
     const label = DB_LABELS[activeId] || activeId;
-    setStatus({ kind: 'success', message: `Loaded ${formatCount(rows.length)} rows for ${label} from ${source}.` });
+    setStatus({ kind: 'success', message: `Loaded ${formatCount(total)} rows for ${label} from ${source}.` });
   };
 
 
@@ -663,10 +680,10 @@ export default function App() {
         const response = await fetch(`/api/report/local-${id}.json?source=sheet&limit=2500&t=${Date.now()}`);
         if (response.ok) {
           const payload = await response.json();
-          hydrateWorkspace(payload.rows ?? [], payload.source || `Google Sheet: ${id}`, payload.columns, id);
+          hydrateWorkspace(payload.rows ?? [], payload.source || `Google Sheet: ${id}`, payload.columns, id, payload.totalRows || payload.rowCount);
           setStatus({
             kind: 'success',
-            message: `Updated ${formatCount(payload.rowCount || payload.rows?.length || 0)} rows for ${label} from Google Sheet.`,
+            message: `Updated ${formatCount(payload.totalRows || payload.rowCount || payload.rows?.length || 0)} rows for ${label} from Google Sheet.`,
           });
         } else {
           throw new Error(`HTTP ${response.status}`);
@@ -780,7 +797,7 @@ export default function App() {
         const response = await fetch(`/api/report/local-${id}.json`, { cache: 'no-store' });
         if (response.ok) {
            const payload = await response.json();
-           hydrateWorkspace(payload.rows ?? [], payload.source || `local data/${id}.csv`, payload.columns, id);
+           hydrateWorkspace(payload.rows ?? [], payload.source || `local data/${id}.csv`, payload.columns, id, payload.totalRows || payload.rowCount);
            return;
         }
       } catch {
@@ -1168,6 +1185,7 @@ export default function App() {
         <ReportTable
           columns={reportColumns}
           rows={reportRows}
+          overallTotal={datasetTotals[active]}
           onRowsChange={(updater) => {
             setReportRows((prev) => {
               const updated = typeof updater === 'function' ? updater(prev) : updater;

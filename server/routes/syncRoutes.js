@@ -367,6 +367,7 @@ router.get('/report/local-:target.json', async (req, res) => {
         spreadsheetId: sheetResult.spreadsheetId,
         sheetName: sheetResult.sheetName,
         totalRows: sheetResult.totalRows,
+        rowCount: sheetResult.totalRows,
         page: sheetResult.page,
         pageSize: sheetResult.pageSize,
         ...shaped,

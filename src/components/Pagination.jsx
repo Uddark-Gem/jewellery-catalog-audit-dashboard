@@ -9,6 +9,7 @@ export default function Pagination({
   pageSize = 100,
   pageSizeOptions = [10, 25, 50, 100, 250],
   totalEntries = 0,
+  overallTotal = null,
   selectedCount = 0,
   onPageChange,
   onPageSizeChange,
@@ -42,6 +43,7 @@ export default function Pagination({
         </span>
         <span className="text-slate-600 dark:text-slate-300 font-medium">
           Showing {formatNumber(startIndex)} to {formatNumber(endIndex)} of {formatNumber(totalEntries)} entries
+          {overallTotal && overallTotal > totalEntries ? ` (${formatNumber(overallTotal)} in Google Sheet)` : ''}
         </span>
       </div>
 

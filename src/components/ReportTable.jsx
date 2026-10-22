@@ -39,7 +39,7 @@ const getAutoColumnWidth = (column, sampleRows) => {
   return Math.round(Math.min(Math.max(preferredWidth, 80), 300));
 };
 
-export default function ReportTable({ columns, rows = [], onRowsChange, onExport, onRefresh, isRefreshing = false }) {
+export default function ReportTable({ columns, rows = [], onRowsChange, onExport, onRefresh, isRefreshing = false, overallTotal = null }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [search, setSearch] = useState('');
@@ -493,6 +493,7 @@ export default function ReportTable({ columns, rows = [], onRowsChange, onExport
           pageSize={pageSize}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           totalEntries={sortedRows.length}
+          overallTotal={overallTotal}
           selectedCount={selectedIds.length}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
