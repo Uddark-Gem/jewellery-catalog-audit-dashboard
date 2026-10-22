@@ -523,7 +523,6 @@ export default function App() {
     setReportColumns(csvColumns);
     setStockRows({});
     setSourceLabel(source);
-    setLastSyncLabel('Just now');
     setActive(activeId);
 
     const label = DB_LABELS[activeId] || activeId;
