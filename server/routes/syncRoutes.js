@@ -9,6 +9,7 @@ import csv from 'csv-parser';
 import { config } from '../config/env.js';
 import { getDb } from '../db.js';
 import { parseCsvText } from '../services/csvService.js';
+import { fetchDatasetFromGoogleSheet, uploadDatasetToSheet } from '../services/overviewSheetsService.js';
 
 const router = Router();
 
@@ -243,6 +244,11 @@ router.get('/sync-staging', async (req, res) => {
           }));
 
           sendEvent({ type: 'complete', rowCount: shaped.rows.length, columns: shaped.columns });
+
+          // Upload to Google Sheet in background after staging download
+          uploadDatasetToSheet(targetDb)
+            .then((res) => console.log(`[Sync] Uploaded ${targetDb} to Google Sheet "${res.sheetName}"`))
+            .catch((err) => console.warn(`[Sync] Google Sheet upload warning for ${targetDb}:`, err.message));
         } catch (err) {
           sendEvent({ type: 'error', message: err.message });
         } finally {
@@ -293,14 +299,15 @@ router.get('/report/local-:target.json', async (req, res) => {
   const target = req.params.target;
   const cacheFile = path.join(config.paths.data, `${target}-cache.json`);
   const csvFile = path.join(config.paths.data, `${target}.csv`);
+  const forceSheet = req.query.source === 'sheet';
 
   try {
-    if (fs.existsSync(cacheFile)) {
+    if (!forceSheet && fs.existsSync(cacheFile)) {
       const raw = await fs.promises.readFile(cacheFile, 'utf8');
       return res.json(JSON.parse(raw));
     }
 
-    if (fs.existsSync(csvFile)) {
+    if (!forceSheet && fs.existsSync(csvFile)) {
       const csvText = await fs.promises.readFile(csvFile, 'utf8');
       const parsed = parseCsvText(csvText);
       const shaped = shapeReportPayload(parsed.columns, parsed.rows);
@@ -312,9 +319,38 @@ router.get('/report/local-:target.json', async (req, res) => {
       return res.json({ source: `Local CSV: ${target}.csv`, ...shaped });
     }
 
-    res.status(404).json({ error: `No local data/${target}.csv found.` });
+    // Google Sheets Fallback (Used in Serverless/Vercel or when requested)
+    const limit = Number.parseInt(req.query.limit || '3000', 10);
+    const sheetResult = await fetchDatasetFromGoogleSheet(target, limit);
+    if (sheetResult) {
+      const shaped = shapeReportPayload(sheetResult.columns, sheetResult.rows);
+      return res.json({
+        source: sheetResult.source,
+        spreadsheetId: sheetResult.spreadsheetId,
+        sheetName: sheetResult.sheetName,
+        totalRows: sheetResult.totalRows,
+        ...shaped,
+      });
+    }
+
+    res.status(404).json({ error: `No local data/${target}.csv found, and no Google Sheet mapping configured.` });
   } catch (err) {
+    console.error(`[Data Route] Error serving /report/local-${target}.json:`, err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/sync-to-sheet
+ * Explicitly triggers uploading a dataset from local data/ to its Google Sheet.
+ */
+router.post('/sync-to-sheet', async (req, res) => {
+  const { target = 'report', limit } = req.body || {};
+  try {
+    const result = await uploadDatasetToSheet(target, limit ? Number.parseInt(limit, 10) : null);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

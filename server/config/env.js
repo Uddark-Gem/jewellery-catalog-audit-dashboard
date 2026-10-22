@@ -41,7 +41,10 @@ export const config = {
   google: {
     serviceAccountPath: process.env.GOOGLE_SERVICE_ACCOUNT_JSON_PATH || './secrets/google-service-account.json',
     serviceAccountBase64: process.env.GOOGLE_SERVICE_ACCOUNT_BASE64 || '',
-    spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID || '',
+    spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID || '1wKfFadJlQrMli9GTBljjb3m6HUJmazFG_uXAvFPsQlY',
+    exportSpreadsheetId: process.env.GOOGLE_SHEET_EXPORT_DATA_ID || '1gF5LTrq7u81-bk0F5C5LBjhYMqE5UtuQt43MIMj6LWI',
+    mediaSpreadsheetId: process.env.GOOGLE_SHEET_MEDIA_ID || '1ffR337uw0Uu2gCirNjdLSx12UP1z-ebS9Sr6hacoSdg',
+    customOptionsSpreadsheetId: process.env.GOOGLE_SHEET_CUSTOM_OPTIONS_ID || '1fMYF2bFljbvamNYVN_dFUmYDOj4yXzwdtG69CYoIXKw',
     sheetName: process.env.GOOGLE_SHEET_NAME || 'Products',
     driveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
   },

@@ -600,7 +600,7 @@ export default function App() {
         const response = await fetch(`/api/report/local-${targetId}.json`, { cache: 'no-store' });
         if (!response.ok) throw new Error(await response.text());
         const payload = await response.json();
-        if (!cancelled) hydrateWorkspace(payload.rows ?? [], `local data/${targetId}.csv`, payload.columns, targetId);
+        if (!cancelled) hydrateWorkspace(payload.rows ?? [], payload.source || `local data/${targetId}.csv`, payload.columns, targetId);
       } catch (error) {
         if (!cancelled) {
           if (targetId === 'report') {
@@ -747,7 +747,7 @@ export default function App() {
         const response = await fetch(`/api/report/local-${id}.json`, { cache: 'no-store' });
         if (response.ok) {
            const payload = await response.json();
-           hydrateWorkspace(payload.rows ?? [], `local data/${id}.csv`, payload.columns, id);
+           hydrateWorkspace(payload.rows ?? [], payload.source || `local data/${id}.csv`, payload.columns, id);
            return;
         }
       } catch {
