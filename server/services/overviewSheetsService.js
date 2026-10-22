@@ -18,7 +18,8 @@ const REMOVED_REPORT_COLUMNS = new Set([
   'description2', 'small_image', 'thumbnail', 'invoice_id', 'news_to_date',
   'promotion_discount_price', 'additional_certification', 'verified_certificateimage',
   'verified_certificateimage1', 'length_cm', 'how_to_wear', 'arrangement_type',
-  'strands', 'length_inches', 'beads_in_strand', 'beads_size', 'hole', 'call_for_price_text'
+  'strands', 'length_inches', 'beads_in_strand', 'beads_size', 'hole', 'call_for_price_text',
+  'comment_explation'
 ]);
 
 /**
