@@ -20,7 +20,11 @@ const uniqueOptions = (rows, key) => {
   const limit = Math.min(rows.length, 5000);
   for (let i = 0; i < limit; i++) {
     const val = toText(rows[i]?.[key]);
-    if (val) set.add(val);
+    if (!val) continue;
+    if (key === 'attribute_set_id' && (val.startsWith(',') || val.startsWith('.') || val.length > 40 || val.includes(','))) {
+      continue;
+    }
+    set.add(val);
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 };

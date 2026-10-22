@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
+import csvParser from 'csv-parser';
 import { getGoogleSheetsClient } from '../config/google.js';
 import { SHEETS_MAPPING } from '../config/sheetsMapping.js';
 import { parseCsvLine } from './csvService.js';
@@ -108,37 +109,48 @@ export async function uploadDatasetToSheet(targetId, maxRowsLimit = null, onProg
 
   const sheets = await getGoogleSheetsClient();
 
-  // Step 1: Read header line and count lines
-  console.log('[Upload] Scanning lines and headers...');
+  // Step 1: Read headers and count valid rows with RFC-4180 multiline CSV parser
+  console.log('[Upload] Scanning CSV structure with multiline parser...');
+  const isReport = targetId === 'report';
+  const cleanCell = (val) => String(val ?? '').replace(/[\r\n]+/g, ' ').trim();
+
   let rawHeaders = null;
-  let totalLineCount = 0;
-
-  const countRl = readline.createInterface({
-    input: fs.createReadStream(csvPath),
-    crlfDelay: Infinity,
+  await new Promise((resolve, reject) => {
+    const s = fs.createReadStream(csvPath)
+      .pipe(csvParser())
+      .on('headers', (headers) => {
+        rawHeaders = headers.map((h) => cleanCell(h)).filter(Boolean);
+        s.destroy();
+        resolve();
+      })
+      .on('error', reject);
   });
-
-  for await (const line of countRl) {
-    if (!line.trim()) continue;
-    if (!rawHeaders) {
-      rawHeaders = parseCsvLine(line);
-    } else {
-      totalLineCount++;
-    }
-  }
 
   if (!rawHeaders || rawHeaders.length === 0) {
     throw new Error(`CSV file ${csvPath} is empty or has no header.`);
   }
 
   let finalHeaders = rawHeaders;
-  const isReport = targetId === 'report';
   if (isReport) {
     finalHeaders = rawHeaders.filter((col) => col && !REMOVED_REPORT_COLUMNS.has(col));
   }
 
-  const colIndices = finalHeaders.map((h) => rawHeaders.indexOf(h));
-  const effectiveTotal = maxRowsLimit ? Math.min(totalLineCount, maxRowsLimit) : totalLineCount;
+  // Count valid enabled rows
+  let effectiveTotal = 0;
+  await new Promise((resolve, reject) => {
+    fs.createReadStream(csvPath)
+      .pipe(csvParser())
+      .on('data', (row) => {
+        if (isReport && cleanCell(row.status).toLowerCase().includes('disabled')) return;
+        effectiveTotal++;
+      })
+      .on('end', resolve)
+      .on('error', reject);
+  });
+
+  if (maxRowsLimit && effectiveTotal > maxRowsLimit) {
+    effectiveTotal = maxRowsLimit;
+  }
   console.log(`[Upload] Headers: ${finalHeaders.length} columns. Total data rows: ${effectiveTotal}`);
 
   // Step 2: Ensure grid dimensions
@@ -165,17 +177,10 @@ export async function uploadDatasetToSheet(targetId, maxRowsLimit = null, onProg
 
   // Step 5: Stream lines in packets of PACKET_SIZE (1,000 rows)
   console.log(`[Upload] Uploading ${effectiveTotal} rows in packets of ${PACKET_SIZE} rows...`);
-  const readRl = readline.createInterface({
-    input: fs.createReadStream(csvPath),
-    crlfDelay: Infinity,
-  });
 
-  let isFirstLine = true;
   let currentPacket = [];
   let uploadedRows = 0;
   let startRowIndex = 2; // Row 1 is header
-
-  const statusIdx = rawHeaders.indexOf('status');
 
   const sendPacket = async (packet, startRow) => {
     let attempt = 0;
@@ -200,22 +205,11 @@ export async function uploadDatasetToSheet(targetId, maxRowsLimit = null, onProg
     }
   };
 
-  for await (const line of readRl) {
-    if (isFirstLine) {
-      isFirstLine = false;
-      continue;
-    }
-    if (!line.trim()) continue;
+  const dataStream = fs.createReadStream(csvPath).pipe(csvParser());
+  for await (const row of dataStream) {
+    if (isReport && cleanCell(row.status).toLowerCase().includes('disabled')) continue;
 
-    const rowValues = parseCsvLine(line);
-
-    // Filter disabled if report
-    if (isReport && statusIdx !== -1) {
-      const statusVal = String(rowValues[statusIdx] ?? '').toLowerCase();
-      if (statusVal.includes('disabled')) continue;
-    }
-
-    const shapedRow = colIndices.map((idx) => (idx !== -1 ? (rowValues[idx] ?? '') : ''));
+    const shapedRow = finalHeaders.map((h) => cleanCell(row[h]));
     currentPacket.push(shapedRow);
 
     if (currentPacket.length >= PACKET_SIZE) {
