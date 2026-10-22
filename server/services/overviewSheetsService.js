@@ -53,11 +53,11 @@ async function ensureGridSize(sheets, spreadsheetId, sheetTitle, neededRows, nee
   const sheetId = sheet.properties.sheetId;
   const currentRows = sheet.properties.gridProperties?.rowCount || 1000;
   const currentCols = sheet.properties.gridProperties?.columnCount || 26;
+  const targetRows = Math.max(currentRows, neededRows + 50);
+  const targetCols = Math.max(neededCols + 2, 6);
 
-  if (currentRows < neededRows || currentCols < neededCols) {
-    const targetRows = Math.max(currentRows, neededRows + 50);
-    const targetCols = Math.max(currentCols, neededCols + 5);
-    console.log(`[Grid] Resizing "${sheetTitle}" grid to ${targetRows} rows x ${targetCols} cols...`);
+  if (currentRows < neededRows || currentCols > targetCols + 10) {
+    console.log(`[Grid] Optimizing "${sheetTitle}" grid to ${targetRows} rows x ${targetCols} cols...`);
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: {
