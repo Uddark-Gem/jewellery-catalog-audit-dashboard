@@ -1,10 +1,51 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { Router } from 'express';
-import { getGoogleIntegrationStatus } from '../config/google.js';
+import { getGoogleIntegrationStatus, setRuntimeCredentials, setRuntimeSpreadsheetId } from '../config/google.js';
 import { defaultSheetsService } from '../services/googleSheetsService.js';
+import { referenceRepo } from '../repositories/referenceRepo.js';
 import { auditRepo } from '../repositories/auditRepo.js';
 import { productRepo } from '../repositories/productRepo.js';
+import { config } from '../config/env.js';
 
 const router = Router();
+
+/**
+ * POST /api/sheets/configure
+ * Updates spreadsheet ID or service account credentials dynamically.
+ */
+router.post('/configure', async (req, res) => {
+  try {
+    const { spreadsheetId, serviceAccountJson } = req.body;
+    if (spreadsheetId) {
+      setRuntimeSpreadsheetId(spreadsheetId.trim());
+      defaultSheetsService.spreadsheetId = spreadsheetId.trim();
+    }
+
+    if (serviceAccountJson) {
+      let parsedCreds = typeof serviceAccountJson === 'string'
+        ? JSON.parse(serviceAccountJson.trim())
+        : serviceAccountJson;
+      setRuntimeCredentials(parsedCreds);
+
+      try {
+        const secretsDir = path.resolve(config.paths.root, 'secrets');
+        if (!fs.existsSync(secretsDir)) fs.mkdirSync(secretsDir, { recursive: true });
+        fs.writeFileSync(path.join(secretsDir, 'google-service-account.json'), JSON.stringify(parsedCreds, null, 2));
+      } catch (e) {
+        console.warn('Could not write to secrets file:', e.message);
+      }
+    }
+
+    // Force refresh cache
+    await referenceRepo.getAllReferenceDatabases(true);
+
+    const status = await getGoogleIntegrationStatus();
+    res.json({ success: true, status });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * GET /api/sheets/status

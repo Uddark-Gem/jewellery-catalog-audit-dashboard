@@ -1,5 +1,7 @@
+import axios from 'axios';
 import { getGoogleSheetsClient } from '../config/google.js';
 import { config } from '../config/env.js';
+import { parseCsvText } from './csvService.js';
 
 /**
  * Executes a Google Sheets API call with exponential backoff on rate limits / 429 errors.
@@ -230,6 +232,29 @@ export class GoogleSheetsService {
         })
       );
     }
+  }
+
+  /**
+   * Fetches worksheet data via public CSV export if spreadsheet is shared with link.
+   */
+  async fetchPublicSheetCsv(sheetTitle) {
+    if (!this.spreadsheetId) throw new Error('Spreadsheet ID is not configured.');
+    const encodedSheet = encodeURIComponent(sheetTitle);
+    const url = `https://docs.google.com/spreadsheets/d/${this.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodedSheet}`;
+
+    const response = await axios.get(url, {
+      timeout: 10000,
+      responseType: 'text',
+      headers: {
+        'Accept': 'text/csv,text/plain,*/*',
+      },
+    });
+
+    if (!response.data || typeof response.data !== 'string' || response.data.trim().startsWith('<!DOCTYPE html>')) {
+      throw new Error(`Worksheet "${sheetTitle}" is not publicly accessible.`);
+    }
+
+    return parseCsvText(response.data);
   }
 }
 

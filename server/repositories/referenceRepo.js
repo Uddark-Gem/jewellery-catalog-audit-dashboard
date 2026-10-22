@@ -17,10 +17,10 @@ export class ReferenceRepository {
   async getAllReferenceDatabases(forceRefresh = false) {
     if (!forceRefresh) {
       const cached = await this.readCache();
-      if (cached) return cached;
+      if (cached && cached.length > 0) return cached;
     }
 
-    // Try Google Sheets first if configured
+    // Tier 1: Try Google Sheets API via Service Account if configured
     const googleStatus = await getGoogleIntegrationStatus();
     if (googleStatus.ready && googleStatus.sheets?.length > 0) {
       try {
@@ -30,14 +30,72 @@ export class ReferenceRepository {
           return sheetResults;
         }
       } catch (err) {
-        console.warn(`[ReferenceRepository] Could not fetch from Google Sheets: ${err.message}. Falling back to local CSVs.`);
+        console.warn(`[ReferenceRepository] Could not fetch from Google Sheets API: ${err.message}. Trying public link fallback.`);
       }
     }
 
-    // Fallback to local CSV files in Database/
+    // Tier 2: Try public Google Sheets fetch if spreadsheet ID configured
+    if (config.google.spreadsheetId) {
+      try {
+        const publicResults = await this.fetchFromPublicGoogleSheets();
+        if (publicResults.length > 0) {
+          await this.writeCache(publicResults);
+          return publicResults;
+        }
+      } catch (err) {
+        console.warn(`[ReferenceRepository] Public Google Sheet fetch: ${err.message}. Falling back to local CSVs.`);
+      }
+    }
+
+    // Tier 3: Fallback to local CSV files in Database/
     const localResults = await this.fetchFromLocalCsvs();
-    await this.writeCache(localResults);
-    return localResults;
+    if (localResults.length > 0) {
+      await this.writeCache(localResults);
+      return localResults;
+    }
+
+    return [];
+  }
+
+  async fetchFromPublicGoogleSheets() {
+    if (!config.google.spreadsheetId) return [];
+    const knownSheets = [
+      'Valid Values',
+      'Gem_Type',
+      'shipping & Dispatch',
+      'J_Colour',
+      'specific_gravity',
+      'Sticker',
+      'naming',
+      'Special Colour',
+      'Vivid in Colour',
+      'astro/non astro',
+      'gemstone2_wise',
+      'hsn metal gemstone',
+    ];
+
+    const results = [];
+    for (let index = 0; index < knownSheets.length; index++) {
+      const title = knownSheets[index];
+      try {
+        const { columns, rows } = await defaultSheetsService.fetchPublicSheetCsv(title);
+        if (columns.length > 0) {
+          results.push({
+            source: `Google Sheets: ${title}`,
+            spreadsheetId: config.google.spreadsheetId,
+            sheetId: title,
+            sheetTitle: title,
+            index,
+            rowCount: rows.length,
+            columns,
+            rows,
+          });
+        }
+      } catch {
+        // Individual worksheet not found or sheet not public
+      }
+    }
+    return results;
   }
 
   async fetchFromGoogleSheets(availableSheets) {

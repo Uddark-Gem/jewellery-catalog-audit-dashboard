@@ -451,20 +451,45 @@ export default function App() {
   const sseRef = useRef(null);
 
 
-  const navGroups = useMemo(() => {
-    const databaseItems = databaseSheets.map((database) => ({
-      id: makeDatabasePanelId(database.sheetId),
-      label: database.sheetTitle,
-    }));
+  const DEFAULT_DATABASE_TABS = useMemo(() => [
+    'Valid Values',
+    'Gem_Type',
+    'shipping & Dispatch',
+    'J_Colour',
+    'specific_gravity',
+    'Sticker',
+    'naming',
+    'Special Colour',
+    'Vivid in Colour',
+    'astro/non astro',
+    'gemstone2_wise',
+    'hsn metal gemstone',
+  ], []);
 
-    return databaseItems.length > 0
-      ? [...BASE_NAV_GROUPS, { label: 'Database', items: databaseItems }]
-      : BASE_NAV_GROUPS;
-  }, [databaseSheets]);
+  const navGroups = useMemo(() => {
+    const databaseItems = databaseSheets.length > 0
+      ? databaseSheets.map((database) => ({
+          id: makeDatabasePanelId(database.sheetId),
+          label: database.sheetTitle,
+        }))
+      : DEFAULT_DATABASE_TABS.map((tab) => ({
+          id: makeDatabasePanelId(tab),
+          label: tab,
+        }));
+
+    return [...BASE_NAV_GROUPS, { label: 'Database', items: databaseItems }];
+  }, [databaseSheets, DEFAULT_DATABASE_TABS]);
+
   const allItems = useMemo(() => navGroups.flatMap((group) => group.items), [navGroups]);
   const activeLabel = allItems.find((item) => item.id === active)?.label ?? '';
   const activeDatabaseId = getDatabaseSheetId(active);
-  const activeDatabase = databaseSheets.find((database) => String(database.sheetId) === activeDatabaseId);
+  const activeDatabase = activeDatabaseId
+    ? databaseSheets.find((database) => {
+        const id = String(database.sheetId || database.sheetTitle || '').toLowerCase().trim();
+        const target = activeDatabaseId.toLowerCase().trim();
+        return id === target || id.replace(/[^a-z0-9]/g, '') === target.replace(/[^a-z0-9]/g, '');
+      })
+    : null;
   const gemstone2WiseIndex = useMemo(() => buildGemstone2WiseIndex(databaseSheets), [databaseSheets]);
   const activeRowCount = activeDatabase
     ? activeDatabase.rows.length
@@ -507,6 +532,34 @@ export default function App() {
 
 
 
+  const fetchAuditDatabases = async (forceRefresh = false) => {
+    try {
+      const url = forceRefresh ? `${AUDIT_DATABASES_ENDPOINT}?refresh=true` : AUDIT_DATABASES_ENDPOINT;
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) throw new Error(await response.text());
+      const payload = await response.json();
+      const databases = payload.databases ?? [];
+      setDatabaseSheets(databases);
+      if (databases.length > 0) {
+        setAuditLabel(`${databases.length} databases loaded`);
+      } else {
+        setAuditLabel('Reference DB Standby');
+      }
+    } catch {
+      setAuditLabel('Reference DB Standby');
+    }
+  };
+
+  const fetchSheetsStatus = async () => {
+    try {
+      const res = await fetch('/api/sheets/status');
+      if (res.ok) {
+        const data = await res.json();
+        setSheetsStatus(data);
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -539,34 +592,8 @@ export default function App() {
       }
     };
 
-    const loadAuditDatabase = async () => {
-      try {
-        const response = await fetch(AUDIT_DATABASES_ENDPOINT, { cache: 'no-store' });
-        if (!response.ok) throw new Error(await response.text());
-        const payload = await response.json();
-        const databases = payload.databases ?? [];
-        if (!cancelled) {
-          setDatabaseSheets(databases);
-          setAuditLabel(`${databases.length} databases loaded`);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setDatabaseSheets([]);
-          setAuditLabel('Audit database unavailable');
-          setStatus({ kind: 'error', message: error.message || 'Audit database unavailable.' });
-        }
-      }
-    };
-
-    const loadSheetsStatus = async () => {
-      try {
-        const res = await fetch('/api/sheets/status');
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled) setSheetsStatus(data);
-        }
-      } catch {}
-    };
+    fetchAuditDatabases();
+    fetchSheetsStatus();
 
     const loadLocalReport = async (targetId = 'report') => {
       try {
@@ -592,8 +619,6 @@ export default function App() {
 
     loadStoredAuditRows();
     loadLocalReport();
-    loadAuditDatabase();
-    loadSheetsStatus();
     return () => {
       cancelled = true;
     };
@@ -1062,6 +1087,49 @@ export default function App() {
   const renderPanel = () => {
     if (activeDatabase) return <DatabaseTable columns={activeDatabase.columns} rows={activeDatabase.rows} />;
 
+    if (active.startsWith('database:')) {
+      const sheetName = getDatabaseSheetId(active);
+      return (
+        <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs text-center space-y-4 max-w-lg mx-auto my-auto">
+          <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+            <DatabaseIcon className="w-8 h-8" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              {sheetName} Database
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Linked to your Google Sheet: <span className="font-mono text-blue-600 dark:text-blue-400 font-semibold">Catalog DataBase - Loose Gemstone</span>
+            </p>
+          </div>
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 rounded-xl border border-amber-200 dark:border-amber-900/40 text-xs text-left space-y-1 w-full">
+            <p className="font-semibold">Google Sheets Database in Standby</p>
+            <p className="text-[11.5px] text-amber-600 dark:text-amber-400/90">
+              Click &quot;Connect Google Sheet&quot; below to connect via link sharing (view access) or Google Service Account.
+            </p>
+          </div>
+          <div className="flex gap-2.5 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsSheetsModalOpen(true)}
+              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5"
+            >
+              <DatabaseIcon className="w-3.5 h-3.5" />
+              Connect Google Sheet
+            </button>
+            <button
+              type="button"
+              onClick={() => fetchAuditDatabases(true)}
+              className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <RefreshCwIcon className="w-3.5 h-3.5" />
+              Retry Load
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (['report', 'q3_processed_images', 'videodata_new', 'templatetagproduct_gemstone', 'templatetagproduct_jewellery', 'templatetagproduct', 'custom_option_issues'].includes(active)) {
       return (
         <ReportTable
@@ -1382,6 +1450,10 @@ export default function App() {
         onClose={() => setIsSheetsModalOpen(false)}
         activePanelId={active}
         activeRows={UPDATE_PANELS[active] ? updateRows[active] : reportRows}
+        onSheetsConnected={() => {
+          fetchAuditDatabases(true);
+          fetchSheetsStatus();
+        }}
       />
     </div>
   );

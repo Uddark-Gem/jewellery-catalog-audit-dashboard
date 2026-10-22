@@ -6,6 +6,14 @@ export const formatCount = (value) => new Intl.NumberFormat('en-US').format(valu
 export const makeDatabasePanelId = (sheetId) => `database:${sheetId}`;
 export const getDatabaseSheetId = (id) => (id.startsWith('database:') ? id.slice('database:'.length) : null);
 export const makeDatabaseColumns = (columns = []) => makeReportColumns(columns).map((column) => ({ ...column, label: column.key }));
+export const findDatabaseSheet = (databaseSheets = [], name = '') => {
+  if (!Array.isArray(databaseSheets) || !name) return null;
+  const target = normalizeLookupValue(name).replace(/[^a-z0-9]/g, '');
+  return databaseSheets.find((s) => {
+    const title = normalizeLookupValue(s.sheetTitle || s.sheetId).replace(/[^a-z0-9]/g, '');
+    return title === target || title.includes(target) || target.includes(title);
+  });
+};
 export const normalizeLookupValue = (value) => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 export const normalizeUrlKey = (value) => String(value ?? '').trim().toLowerCase().replace(/^\/+|\/+$/g, '');
 export const makeSkuUrlPart = (sku) => String(sku ?? '').trim().toLowerCase();
@@ -29,7 +37,7 @@ export const normalizeReportNumberFields = (row) => ({
 });
 
 export const buildGemstone2WiseIndex = (databaseSheets) => {
-  const gemstone2Wise = databaseSheets.find((database) => database.sheetTitle === 'gemstone2_wise');
+  const gemstone2Wise = findDatabaseSheet(databaseSheets, 'gemstone2_wise');
   const rows = gemstone2Wise?.rows ?? [];
   const index = new Map();
 
@@ -140,7 +148,7 @@ export const DIAMOND_DESIGN_CODES = new Set([
 ]);
 
 export const buildJewelleryHsnAuditRows = (reportRows, databaseSheets) => {
-  const hsnMetalGemstoneSheet = databaseSheets.find(s => normalizeLookupValue(s.sheetTitle) === 'hsn metal gemstone');
+  const hsnMetalGemstoneSheet = findDatabaseSheet(databaseSheets, 'hsn metal gemstone');
   if (!hsnMetalGemstoneSheet) return [];
   const hsnRows = hsnMetalGemstoneSheet.rows;
 
@@ -234,7 +242,7 @@ export const buildJewelleryHsnAuditRows = (reportRows, databaseSheets) => {
 };
 
 export const buildTaxClassAuditRows = (reportRows, databaseSheets) => {
-  const gemTypeSheet = databaseSheets.find(s => normalizeLookupValue(s.sheetTitle) === 'gem_type');
+  const gemTypeSheet = findDatabaseSheet(databaseSheets, 'gem_type');
   if (!gemTypeSheet) return [];
   const gemTypeRows = gemTypeSheet.rows;
 
@@ -275,7 +283,7 @@ export const buildTaxClassAuditRows = (reportRows, databaseSheets) => {
 };
 
 export const buildClassificationAuditRows = (reportRows, databaseSheets) => {
-  const gemTypeSheet = databaseSheets.find(s => normalizeLookupValue(s.sheetTitle) === 'gem_type');
+  const gemTypeSheet = findDatabaseSheet(databaseSheets, 'gem_type');
   if (!gemTypeSheet) return [];
   const gemTypeRows = gemTypeSheet.rows;
 
@@ -308,7 +316,7 @@ export const buildClassificationAuditRows = (reportRows, databaseSheets) => {
 };
 
 export const buildStickerAuditRows = (reportRows, databaseSheets) => {
-  const stickerSheet = databaseSheets.find(s => normalizeLookupValue(s.sheetTitle) === 'sticker');
+  const stickerSheet = findDatabaseSheet(databaseSheets, 'sticker');
   if (!stickerSheet) return [];
   const stickerRows = stickerSheet.rows;
 
@@ -449,7 +457,7 @@ export const buildDispatchAuditRows = (reportRows, databaseSheets) => {
 };
 
 export const buildOriginAuditRows = (reportRows, databaseSheets) => {
-  const gemTypeSheet = databaseSheets.find((s) => normalizeLookupValue(s.sheetTitle) === 'gem_type');
+  const gemTypeSheet = findDatabaseSheet(databaseSheets, 'gem_type');
   if (!gemTypeSheet) return [];
 
   const originMap = new Map();
@@ -483,7 +491,7 @@ export const buildOriginAuditRows = (reportRows, databaseSheets) => {
 };
 
 export const buildBenefitsAuditRows = (reportRows, databaseSheets) => {
-  const gemTypeSheet = databaseSheets.find((s) => normalizeLookupValue(s.sheetTitle) === 'gem_type');
+  const gemTypeSheet = findDatabaseSheet(databaseSheets, 'gem_type');
   if (!gemTypeSheet) return [];
 
   const benefitsMap = new Map();

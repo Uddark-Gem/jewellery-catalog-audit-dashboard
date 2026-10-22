@@ -50,9 +50,9 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// Start Server when not running in test runner
+// Start Server when not running in test runner or on Vercel
 let server = null;
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   server = app.listen(config.port, async () => {
   console.log(`========================================================`);
   console.log(` Jewellery Catalog Audit Dashboard Server`);

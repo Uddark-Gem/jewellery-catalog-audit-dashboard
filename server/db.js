@@ -1,23 +1,32 @@
-import fs from 'fs';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import path from 'node:path';
 import { config } from './config/env.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const dbDir = config.paths.data;
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-const DB_PATH = path.join(dbDir, 'audit.db');
+let sqlite3Module = null;
+let openDbFn = null;
 
 export async function getDb() {
-  const db = await open({
+  if (!sqlite3Module || !openDbFn) {
+    try {
+      const sqlite3 = await import('sqlite3');
+      sqlite3Module = sqlite3.default || sqlite3;
+      const sqlite = await import('sqlite');
+      openDbFn = sqlite.open;
+    } catch (err) {
+      console.warn('[SQLite] SQLite driver could not be loaded in this environment:', err.message);
+      throw new Error(`SQLite unavailable: ${err.message}`);
+    }
+  }
+
+  const dbDir = config.paths.data;
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+  const DB_PATH = path.join(dbDir, 'audit.db');
+
+  const db = await openDbFn({
     filename: DB_PATH,
-    driver: sqlite3.Database
+    driver: sqlite3Module.Database
   });
 
   await db.exec(`
