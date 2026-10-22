@@ -14,6 +14,15 @@ export function sanitizeCsvValue(value) {
 }
 
 /**
+ * Parses a single CSV line into an array of field values.
+ */
+export function parseCsvLine(line) {
+  if (!line || !line.trim()) return [];
+  const result = Papa.parse(line, { skipEmptyLines: false });
+  return result.data?.[0] || [];
+}
+
+/**
  * Parses a CSV string or buffer into an array of objects with sanitized headers.
  */
 export function parseCsvText(csvText, options = {}) {

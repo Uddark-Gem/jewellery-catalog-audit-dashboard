@@ -320,8 +320,9 @@ router.get('/report/local-:target.json', async (req, res) => {
     }
 
     // Google Sheets Fallback (Used in Serverless/Vercel or when requested)
-    const limit = Number.parseInt(req.query.limit || '3000', 10);
-    const sheetResult = await fetchDatasetFromGoogleSheet(target, limit);
+    const limit = Number.parseInt(req.query.limit || '2500', 10);
+    const page = Number.parseInt(req.query.page || '1', 10);
+    const sheetResult = await fetchDatasetFromGoogleSheet(target, limit, page);
     if (sheetResult) {
       const shaped = shapeReportPayload(sheetResult.columns, sheetResult.rows);
       return res.json({
@@ -329,6 +330,8 @@ router.get('/report/local-:target.json', async (req, res) => {
         spreadsheetId: sheetResult.spreadsheetId,
         sheetName: sheetResult.sheetName,
         totalRows: sheetResult.totalRows,
+        page: sheetResult.page,
+        pageSize: sheetResult.pageSize,
         ...shaped,
       });
     }
