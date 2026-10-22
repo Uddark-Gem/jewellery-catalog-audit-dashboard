@@ -649,6 +649,36 @@ export default function App() {
     }
   }, [status]);
 
+  const handleRefreshGoogleSheet = async (targetId = null) => {
+    if (isFetching) return;
+    const id = targetId || active;
+    setIsFetching(true);
+    const label = DB_LABELS[id] || id;
+    setStatus({ kind: 'info', message: `Refreshing ${label} directly from Google Sheet...` });
+    try {
+      if (id.startsWith('database:')) {
+        await fetchAuditDatabases(true);
+        setStatus({ kind: 'success', message: `Updated reference databases from Google Sheet.` });
+      } else {
+        const response = await fetch(`/api/report/local-${id}.json?source=sheet&limit=2500&t=${Date.now()}`);
+        if (response.ok) {
+          const payload = await response.json();
+          hydrateWorkspace(payload.rows ?? [], payload.source || `Google Sheet: ${id}`, payload.columns, id);
+          setStatus({
+            kind: 'success',
+            message: `Updated ${formatCount(payload.rowCount || payload.rows?.length || 0)} rows for ${label} from Google Sheet.`,
+          });
+        } else {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      }
+    } catch (err) {
+      setStatus({ kind: 'error', message: `Failed to refresh ${label}: ${err.message}` });
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
   const handleFetchData = (targetDb = null) => {
     if (isFetching) return;
     const activeDb = targetDb || (['q3_processed_images', 'videodata_new', 'templatetagproduct_gemstone', 'templatetagproduct_jewellery', 'templatetagproduct'].includes(active) ? active : 'report');
@@ -1284,15 +1314,25 @@ export default function App() {
           </button>
 
           <button 
-            className="flex items-center gap-2 px-4 py-2 bg-[#111827] hover:bg-[#1E293B] dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors relative overflow-hidden" 
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors" 
+            onClick={() => handleRefreshGoogleSheet(active)}
+            disabled={isFetching}
+            title={`Fetch latest ${DB_LABELS[active] || 'data'} directly from Google Sheet (Fast, ~1s)`}
+          >
+            <RefreshCwIcon className={`w-3.5 h-3.5 ${isFetching && downloadProgress == null ? 'animate-spin' : ''}`} />
+            <span>{isFetching && downloadProgress == null ? 'Refreshing...' : 'Refresh Sheet'}</span>
+          </button>
+
+          <button 
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#111827] hover:bg-[#1E293B] dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors relative overflow-hidden" 
             onClick={() => handleFetchData(active)}
             disabled={isFetching}
-            title={DB_LABELS[active] ? `Sync ${DB_LABELS[active]} from staging` : 'Sync Data'}
+            title={DB_LABELS[active] ? `Download raw ${DB_LABELS[active]} from Staging Server` : 'Sync from Staging Server'}
           >
-            <RefreshCwIcon className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-            <span>{isFetching ? (downloadProgress != null ? `Syncing ${downloadProgress}%` : 'Syncing...') : (DB_LABELS[active] ? `Sync ${DB_LABELS[active]}` : 'Sync Export Data')}</span>
-            {isFetching && (
-              <div className="absolute inset-0 bg-white/20 pointer-events-none" style={{ width: downloadProgress != null ? `${downloadProgress}%` : '100%' }} />
+            <RefreshCwIcon className={`w-3.5 h-3.5 ${isFetching && downloadProgress != null ? 'animate-spin' : ''}`} />
+            <span>{isFetching && downloadProgress != null ? `Staging ${downloadProgress}%` : 'Sync Staging'}</span>
+            {isFetching && downloadProgress != null && (
+              <div className="absolute inset-0 bg-white/20 pointer-events-none" style={{ width: `${downloadProgress}%` }} />
             )}
           </button>
         </div>

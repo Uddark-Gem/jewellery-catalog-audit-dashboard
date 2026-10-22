@@ -182,12 +182,24 @@ router.get('/sync-staging', async (req, res) => {
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
 
   const sendEvent = (data) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
+
+  sendEvent({
+    type: 'progress',
+    percent: 0,
+    loaded: 0,
+    total: 0,
+    message: `Connecting to staging server for ${targetDb}...`,
+  });
 
   try {
     const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
@@ -209,19 +221,27 @@ router.get('/sync-staging', async (req, res) => {
 
       const total = Number.parseInt(proxyRes.headers['content-length'] || '0', 10);
       let loaded = 0;
-      let lastReportedPercent = -1;
+      let lastReportedTime = Date.now();
 
       const writeStream = fs.createWriteStream(tempFile);
       proxyRes.pipe(writeStream);
 
       proxyRes.on('data', (chunk) => {
         loaded += chunk.length;
-        if (total > 0) {
-          const percent = Math.floor((loaded / total) * 100);
-          if (percent !== lastReportedPercent && percent % 5 === 0) {
-            lastReportedPercent = percent;
-            sendEvent({ type: 'progress', percent, loaded, total });
-          }
+        const now = Date.now();
+        // Send progress every 400ms or when complete
+        if (now - lastReportedTime >= 400 || (total > 0 && loaded >= total)) {
+          lastReportedTime = now;
+          const percent = total > 0 ? Math.floor((loaded / total) * 100) : 0;
+          const mbLoaded = (loaded / 1024 / 1024).toFixed(1);
+          const mbTotal = total > 0 ? (total / 1024 / 1024).toFixed(1) : '?';
+          sendEvent({
+            type: 'progress',
+            percent,
+            loaded,
+            total,
+            message: `Downloading from staging: ${percent}% (${mbLoaded} MB / ${mbTotal} MB)...`,
+          });
         }
       });
 

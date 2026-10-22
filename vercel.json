@@ -10,7 +10,8 @@
   ],
   "functions": {
     "api/index.js": {
-      "includeFiles": "Database/**"
+      "includeFiles": "Database/**",
+      "maxDuration": 60
     }
   }
 }
