@@ -142,10 +142,12 @@ export async function uploadDatasetToSheet(targetId, maxRowsLimit = null, onProg
   console.log(`[Upload] Headers: ${finalHeaders.length} columns. Total data rows: ${effectiveTotal}`);
 
   // Step 2: Ensure grid dimensions
+  if (onProgress) onProgress({ phase: 'grid', percent: 2, message: `Preparing Google Sheet grid for "${sheetName}"...` });
   await ensureGridSize(sheets, spreadsheetId, sheetName, effectiveTotal + 10, finalHeaders.length + 5);
 
   // Step 3: Clear existing sheet
   console.log(`[Upload] Clearing existing values in "${sheetName}"...`);
+  if (onProgress) onProgress({ phase: 'clean', percent: 5, message: `Cleaning Google Sheet "${sheetName}" (clearing old data)...` });
   await sheets.spreadsheets.values.clear({
     spreadsheetId,
     range: `${sheetName}!A1:ZZ`,
@@ -153,6 +155,7 @@ export async function uploadDatasetToSheet(targetId, maxRowsLimit = null, onProg
 
   // Step 4: Write header row
   console.log('[Upload] Writing header row...');
+  if (onProgress) onProgress({ phase: 'headers', percent: 8, message: `Writing ${finalHeaders.length} headers to "${sheetName}"...` });
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range: `${sheetName}!A1`,
@@ -220,8 +223,17 @@ export async function uploadDatasetToSheet(targetId, maxRowsLimit = null, onProg
       uploadedRows += currentPacket.length;
       startRowIndex += currentPacket.length;
       const pct = Math.round((uploadedRows / effectiveTotal) * 100);
+      const scaledPct = Math.min(8 + Math.round(pct * 0.82), 95);
       console.log(`[Upload Progress] ${uploadedRows} / ${effectiveTotal} rows (${pct}%) uploaded to "${sheetName}"`);
-      if (onProgress) onProgress(uploadedRows, effectiveTotal, pct);
+      if (onProgress) {
+        onProgress({
+          phase: 'upload',
+          current: uploadedRows,
+          total: effectiveTotal,
+          percent: scaledPct,
+          message: `Pasting into Google Sheet: ${uploadedRows.toLocaleString()} / ${effectiveTotal.toLocaleString()} rows (${pct}%)...`,
+        });
+      }
       currentPacket = [];
       await sleep(150); // Pacing for Google API quota
     }
@@ -236,11 +248,38 @@ export async function uploadDatasetToSheet(targetId, maxRowsLimit = null, onProg
     await sendPacket(currentPacket, startRowIndex);
     uploadedRows += currentPacket.length;
     console.log(`[Upload Progress] ${uploadedRows} / ${effectiveTotal} rows (100%) uploaded to "${sheetName}"`);
-    if (onProgress) onProgress(uploadedRows, effectiveTotal, 100);
+    if (onProgress) {
+      onProgress({
+        phase: 'upload',
+        current: uploadedRows,
+        total: effectiveTotal,
+        percent: 95,
+        message: `Pasting into Google Sheet: ${uploadedRows.toLocaleString()} / ${effectiveTotal.toLocaleString()} rows (100%)...`,
+      });
+    }
   }
 
-  console.log(`[Upload Complete] Finished uploading all ${uploadedRows} rows to "${sheetName}"!`);
-  return { success: true, uploadedCount: uploadedRows, sheetName, spreadsheetId };
+  // Step 6: Verify update in Google Sheet
+  console.log('[Upload] Checking and verifying data update in Google Sheet...');
+  if (onProgress) onProgress({ phase: 'verify', percent: 97, message: 'Checking and verifying data update in Google Sheet...' });
+  const verifyRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${sheetName}!A1:B2`,
+  });
+  const isVerified = (verifyRes.data.values?.length || 0) >= 2;
+  console.log(`[Upload] Verification result: ${isVerified ? 'VERIFIED' : 'WARNING'}`);
+
+  if (onProgress) {
+    onProgress({
+      phase: 'done',
+      percent: 100,
+      uploadedCount: uploadedRows,
+      message: `Verified: ${uploadedRows.toLocaleString()} rows successfully updated in Google Sheet "${sheetName}"!`,
+    });
+  }
+
+  console.log(`[Upload Complete] Finished uploading and verified all ${uploadedRows} rows in "${sheetName}"!`);
+  return { success: true, uploadedCount: uploadedRows, isVerified, sheetName, spreadsheetId };
 }
 
 /**

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config/env.js';
 import { parseCsvText } from '../services/csvService.js';
-import { getGoogleIntegrationStatus } from '../config/google.js';
+import { getGoogleIntegrationStatus, getGoogleSheetsClient } from '../config/google.js';
 
 import { defaultSheetsService } from '../services/googleSheetsService.js';
 
@@ -25,6 +25,14 @@ export class ReferenceRepository {
     if (googleStatus.ready && googleStatus.sheets?.length > 0) {
       try {
         const sheetResults = await this.fetchFromGoogleSheets(googleStatus.sheets);
+
+        // Ensure Custom Option from 1fMYF2bFljbvamNYVN_dFUmYDOj4yXzwdtG69CYoIXKw is included
+        const hasCustomOption = sheetResults.some((s) => s.sheetTitle.toLowerCase() === 'custom option');
+        if (!hasCustomOption) {
+          const customDb = await this.fetchCustomOptionDatabase();
+          if (customDb) sheetResults.push(customDb);
+        }
+
         if (sheetResults.length > 0) {
           await this.writeCache(sheetResults);
           return sheetResults;
@@ -38,6 +46,11 @@ export class ReferenceRepository {
     if (config.google.spreadsheetId) {
       try {
         const publicResults = await this.fetchFromPublicGoogleSheets();
+        const hasCustomOption = publicResults.some((s) => s.sheetTitle.toLowerCase() === 'custom option');
+        if (!hasCustomOption) {
+          const customDb = await this.fetchCustomOptionDatabase();
+          if (customDb) publicResults.push(customDb);
+        }
         if (publicResults.length > 0) {
           await this.writeCache(publicResults);
           return publicResults;
@@ -50,11 +63,52 @@ export class ReferenceRepository {
     // Tier 3: Fallback to local CSV files in Database/
     const localResults = await this.fetchFromLocalCsvs();
     if (localResults.length > 0) {
+      const hasCustomOption = localResults.some((s) => s.sheetTitle.toLowerCase() === 'custom option');
+      if (!hasCustomOption) {
+        const customDb = await this.fetchCustomOptionDatabase();
+        if (customDb) localResults.push(customDb);
+      }
       await this.writeCache(localResults);
       return localResults;
     }
 
     return [];
+  }
+
+  async fetchCustomOptionDatabase() {
+    const customSpreadsheetId = config.google.customOptionsSpreadsheetId || '1fMYF2bFljbvamNYVN_dFUmYDOj4yXzwdtG69CYoIXKw';
+    try {
+      const sheets = await getGoogleSheetsClient();
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: customSpreadsheetId,
+        range: "'Custom Option'!A1:ZZ",
+        valueRenderOption: 'FORMATTED_VALUE',
+      });
+      const values = res.data.values || [];
+      if (values.length > 0) {
+        const columns = values[0].map((h) => String(h || '').trim()).filter(Boolean);
+        const rows = values.slice(1).map((r) => {
+          const obj = {};
+          columns.forEach((c, i) => {
+            obj[c] = r[i] !== undefined ? String(r[i]) : '';
+          });
+          return obj;
+        });
+        return {
+          source: `Google Sheets: Custom Option`,
+          spreadsheetId: customSpreadsheetId,
+          sheetId: 'Custom Option',
+          sheetTitle: 'Custom Option',
+          index: 99,
+          rowCount: rows.length,
+          columns,
+          rows,
+        };
+      }
+    } catch (e) {
+      console.warn(`[ReferenceRepository] Could not fetch Custom Option sheet: ${e.message}`);
+    }
+    return null;
   }
 
   async fetchFromPublicGoogleSheets() {

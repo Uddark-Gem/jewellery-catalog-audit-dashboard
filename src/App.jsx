@@ -672,13 +672,17 @@ export default function App() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'progress') {
-          setDownloadProgress(data.percent);
-          const mbLoaded = (data.loaded / 1024 / 1024).toFixed(1);
-          const mbTotal = data.total > 0 ? (data.total / 1024 / 1024).toFixed(1) : '?';
-          setStatus({
-            kind: 'info',
-            message: `Downloading ${label} from staging: ${data.percent}% (${mbLoaded} MB / ${mbTotal} MB)...`,
-          });
+          if (data.percent !== undefined) setDownloadProgress(data.percent);
+          if (data.message) {
+            setStatus({ kind: 'info', message: data.message });
+          } else if (data.loaded !== undefined) {
+            const mbLoaded = (data.loaded / 1024 / 1024).toFixed(1);
+            const mbTotal = data.total > 0 ? (data.total / 1024 / 1024).toFixed(1) : '?';
+            setStatus({
+              kind: 'info',
+              message: `Downloading ${label} from staging: ${data.percent}% (${mbLoaded} MB / ${mbTotal} MB)...`,
+            });
+          }
         } else if (data.type === 'processing') {
           setDownloadProgress(100);
           setStatus({ kind: 'info', message: data.message || `Download complete. Processing ${label}...` });
@@ -691,10 +695,10 @@ export default function App() {
               return res.json();
             })
             .then((payload) => {
-              hydrateWorkspace(payload.rows ?? [], `staging ${activeDb}.csv`, payload.columns, activeDb);
+              hydrateWorkspace(payload.rows ?? [], payload.source || `staging ${activeDb}.csv`, payload.columns, activeDb);
               setStatus({
                 kind: 'success',
-                message: `Successfully downloaded and synced ${formatCount(payload.rowCount || payload.rows?.length || 0)} rows for ${label}.`,
+                message: data.message || `Successfully downloaded, cleaned Google Sheet, and synced ${formatCount(payload.rowCount || payload.rows?.length || 0)} rows for ${label}.`,
               });
             })
             .catch((err) => {

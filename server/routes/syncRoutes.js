@@ -227,7 +227,7 @@ router.get('/sync-staging', async (req, res) => {
 
       writeStream.on('finish', async () => {
         try {
-          sendEvent({ type: 'processing', percent: 100, loaded, total, message: 'Download complete. Parsing and saving cache...' });
+          sendEvent({ type: 'progress', phase: 'processing', percent: 100, loaded, total, message: 'Download complete. Parsing and saving cache...' });
           if (fs.existsSync(localFile)) {
             try { fs.unlinkSync(localFile); } catch {}
           }
@@ -244,12 +244,28 @@ router.get('/sync-staging', async (req, res) => {
             ...shaped,
           }));
 
-          sendEvent({ type: 'complete', rowCount: shaped.rows.length, columns: shaped.columns });
+          // Stream Google Sheet clean, packet paste, and verification progress
+          sendEvent({ type: 'progress', phase: 'upload_start', message: `Preparing Google Sheet for ${targetDb}...` });
 
-          // Upload to Google Sheet in background after staging download
-          uploadDatasetToSheet(targetDb)
-            .then((res) => console.log(`[Sync] Uploaded ${targetDb} to Google Sheet "${res.sheetName}"`))
-            .catch((err) => console.warn(`[Sync] Google Sheet upload warning for ${targetDb}:`, err.message));
+          const uploadResult = await uploadDatasetToSheet(targetDb, null, (p) => {
+            sendEvent({
+              type: 'progress',
+              phase: p.phase,
+              percent: p.percent || 100,
+              current: p.current,
+              total: p.total,
+              message: p.message,
+            });
+          });
+
+          sendEvent({
+            type: 'complete',
+            rowCount: shaped.rows.length,
+            columns: shaped.columns,
+            sheetName: uploadResult?.sheetName,
+            isVerified: uploadResult?.isVerified,
+            message: `Successfully downloaded, cleaned Google Sheet, and pasted ${uploadResult?.uploadedCount?.toLocaleString() || shaped.rows.length.toLocaleString()} rows!`,
+          });
         } catch (err) {
           sendEvent({ type: 'error', message: err.message });
         } finally {
